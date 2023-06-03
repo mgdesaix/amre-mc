@@ -71,4 +71,7 @@ The effect of this was apparent in PCAs in which individuals from BC1 with high 
 
 As a reminder, to use the newly down-sampled BAM files with the variants of interest already identified, you'll need to use ANGSD "-sites" function as described above.
 
+### Final set of variants
+
+After the initial assessment of individual relatedness and depth variation, the final set of variants were called from the downsampled BAM files, which had an average depth of 1.4X.
 
