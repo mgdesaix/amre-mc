@@ -1,0 +1,222 @@
+---
+title: 'WGSassign: Comparing Downsampled Data'
+author: "Matt G. DeSaix"
+date: "2023-03-06"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+depth <- read_table("../bioinformatics/depth/depth-summary.txt")
+amre.meta <- read_csv("../data/samples/amre_master_tidy.csv",
+                      show_col_types = FALSE) %>%
+  left_join(depth, by = "Sample")
+pops <- c("Newfoundland", "Northeast", "Northwest", "South", "SouthDakota")
+```
+
+
+
+reading in data 
+
+```{r}
+ids.47.148 <- read_delim("./data/combined-47-148-122/amre.combined.47.WGSassignIDs.txt",
+                         col_names = c("Bam", "K5_breeding"), delim = "\t",
+                         show_col_types = F) %>%
+  rbind(read_delim("./data/combined-47-148-122/amre.combined.148.WGSassignIDs.txt",
+                         col_names = c("Bam", "K5_breeding"), delim = "\t",
+                   show_col_types = F))
+
+## 0.1x 
+amre.ds_0.1x.like <- read_delim("./data/combined-47-148-122/amre.combined.47.148.ds_0.1x.pop_like.txt",
+                                col_names = pops,
+                                show_col_types = F)
+amre.ds_0.1x.like.summary <- ids.47.148 %>%
+  cbind(amre.ds_0.1x.like) %>%
+  left_join(amre.meta, by = c("Bam", "K5_breeding")) %>%
+  pivot_longer(cols = Newfoundland:SouthDakota,
+               names_to = "AssignedPop",
+               values_to = "AssignedLike") %>%
+  group_by(Sample) %>%
+  mutate(AssignedProb = round(exp(AssignedLike - max(AssignedLike)) / sum(exp(AssignedLike - max(AssignedLike))),2 )) %>%
+  filter(AssignedLike == max(AssignedLike)) %>%
+  ungroup() %>%
+  select(Sample, Site, K5_breeding, AssignedPop, AssignedLike, AssignedProb, Lat, Lon, Depth)
+
+amre.ds_0.01x.like <- read_delim("./data/combined-47-148-122/amre.combined.47.148.ds_0.01x.pop_like.txt",
+                                col_names = pops,
+                                show_col_types = F)
+amre.ds_0.01x.like.summary <- ids.47.148 %>%
+  cbind(amre.ds_0.01x.like) %>%
+  left_join(amre.meta, by = c("Bam", "K5_breeding")) %>%
+  pivot_longer(cols = Newfoundland:SouthDakota,
+               names_to = "AssignedPop",
+               values_to = "AssignedLike") %>%
+  group_by(Sample) %>%
+  mutate(AssignedProb = round(exp(AssignedLike - max(AssignedLike)) / sum(exp(AssignedLike - max(AssignedLike))),2 )) %>%
+  filter(AssignedLike == max(AssignedLike)) %>%
+  ungroup() %>%
+  select(Sample, Site, K5_breeding, AssignedPop, AssignedLike, AssignedProb, Lat, Lon, Depth)
+
+```
+
+## Breeding data
+
+```{r}
+amre.ds_2x.like <- read_delim("./data/combined-47-148-122/amre.combined.47.148.ds_2.0x.pop_like.txt",
+                                col_names = pops,
+                                show_col_types = F)
+amre.ds_2x.like.summary <- ids.47.148 %>%
+  cbind(amre.ds_2x.like) %>%
+  left_join(amre.meta, by = c("Bam", "K5_breeding")) %>%
+  pivot_longer(cols = Newfoundland:SouthDakota,
+               names_to = "AssignedPop",
+               values_to = "AssignedLike") %>%
+  group_by(Sample) %>%
+  mutate(AssignedProb = round(exp(AssignedLike - max(AssignedLike)) / sum(exp(AssignedLike - max(AssignedLike))),2 )) %>%
+  filter(AssignedLike == max(AssignedLike)) %>%
+  ungroup() %>%
+  select(Sample, Site, K5_breeding, AssignedPop, AssignedLike, AssignedProb, Lat, Lon, Depth)
+```
+
+```{r}
+amre.ds_2x.like.summary %>%
+  mutate(Depth = ifelse(Depth > 2, 2, Depth)) %>%
+  group_by(K5_breeding) %>%
+  summarize(N = n(),
+            Mean_Depth = mean(Depth))
+```
+
+```{r}
+amre.ds_2x.like.summary %>%
+  add_column(DS = "None") %>%
+  rbind(amre.ds_0.1x.like.summary %>% add_column(DS = "0.1x")) %>%
+  rbind(amre.ds_0.01x.like.summary %>% add_column(DS = "0.01x")) %>%
+  filter(!is.na(K5_breeding)) %>%
+  mutate(Correct = ifelse(K5_breeding == AssignedPop, 1, 0)) %>%
+  group_by(DS, K5_breeding) %>%
+  summarize(Accuracy = round(100*sum(Correct)/n(),1),
+            .groups = "drop") %>%
+  pivot_wider(names_from = K5_breeding,
+              values_from = Accuracy)
+```
+
+```{r}
+amre.122.ids <- read_table("./data/combined-47-148-122/amre.combined.122.WGSassignIDs.txt",
+                           col_names = c("Bam", "K5_breeding"))
+amre.122.ne_ind <- read_table("./data/combined-47-148-122/amre.combined.122.equal_effective.ds_2.0x.ne_ind_full.txt",
+                              col_names = "Effective_Sample")
+
+cbind(amre.122.ids, amre.122.ne_ind) %>%
+  group_by(K5_breeding) %>%
+  summarize(Effective_size = sum(Effective_Sample))
+```
+
+```{r}
+amre.ds.summary <- amre.ds_2x.like.summary %>%
+  add_column(DS = "Full") %>%
+  rbind(amre.ds_0.1x.like.summary %>% add_column(DS = "0.1x")) %>%
+  rbind(amre.ds_0.01x.like.summary %>% add_column(DS = "0.01x")) %>%
+  filter(!is.na(K5_breeding)) %>%
+  mutate(Correct = ifelse(K5_breeding == AssignedPop, 1, 0))
+  
+# filter(Correct == 0)
+amre.ds.summary %>%
+  group_by(DS) %>%
+  summarize(Accuracy = round(sum(Correct)/n()*100,1),
+            Incorrect = n() - sum(Correct),
+            N = n(),
+           .groups = "drop")
+```
+
+```{r}
+amre.ds.summary %>%
+  group_by(DS, K5_breeding) %>%
+  summarize(Accuracy = sum(Correct)/n(),
+            Incorrect = n() - sum(Correct),
+            N = n(),
+            .groups = "drop")
+```
+
+
+```{r}
+amre.ds.summary %>%
+  filter(Correct == 0)
+```
+
+## Wintering data
+
+```{r}
+amre.ds.summary.wintering <- amre.ds_2x.like.summary %>%
+  add_column(DS = "Full") %>%
+  rbind(amre.ds_0.1x.like.summary %>% add_column(DS = "0.1x")) %>%
+  rbind(amre.ds_0.01x.like.summary %>% add_column(DS = "0.01x")) %>%
+  filter(is.na(K5_breeding))
+
+amre.ds.summary.wintering
+```
+
+
+```{r}
+amre.ds.summary.wintering %>%
+  pivot_wider(names_from = DS, values_from = c(AssignedPop, AssignedProb)) %>%
+  mutate(Consistent = ifelse(AssignedPop_Full == AssignedPop_0.1x & AssignedPop_Full == AssignedPop_0.01x, 1, 0)) %>%
+  group_by(AssignedPop_Full) %>%
+  summarize(N = n(),
+            N_consistent = sum(Consistent),
+            Consistency = round(100*sum(Consistent)/n(),1))
+```
+
+
+
+```{r}
+amre.ds.summary.wintering %>%
+    pivot_wider(names_from = DS, values_from = c(AssignedPop, AssignedProb)) %>%
+  mutate(Consistent = ifelse(AssignedPop_Full == AssignedPop_0.1x & AssignedPop_Full == AssignedPop_0.01x, 1, 0)) %>%
+  # filter(Consistent == 1) %>%
+  left_join(amre.meta, by = c("Sample", "Site")) %>%
+  select(Sample, Site, Year, Lat, Lon, AssignedPop_Full, AssignedPop_0.1x, AssignedPop_0.01x) %>%
+  view()
+  # write_csv(file = "./out/wintering.assignment.all3assignments.csv")
+```
+
+
+```{r}
+amre.ds.summary.wintering %>%
+    pivot_wider(names_from = DS, values_from = c(AssignedPop, AssignedProb)) %>%
+  mutate(Consistent = ifelse(AssignedPop_Full == AssignedPop_0.1x & AssignedPop_Full == AssignedPop_0.01x, 1, 0)) %>%
+  # filter(Consistent == 1) %>%
+  left_join(amre.meta, by = c("Sample", "Site")) %>%
+  select(Sample, Site, Year, Lat, Lon, AssignedPop_Full, AssignedPop_0.1x, AssignedPop_0.01x) %>%
+  # filter(AssignedPop_Full == "Newfoundland") %>%
+  group_by(Site) %>%
+  count(AssignedPop_Full)
+```
+
+
+```{r}
+amre.ds.summary.wintering %>%
+    pivot_wider(names_from = DS, values_from = c(AssignedPop, AssignedProb)) %>%
+  mutate(Consistent = ifelse(AssignedPop_Full == AssignedPop_0.1x & AssignedPop_Full == AssignedPop_0.01x, 1, 0)) %>%
+  # filter(Consistent == 1) %>%
+  left_join(amre.meta, by = c("Sample", "Site")) %>%
+  select(Sample, Site, Year, Lat, Lon, AssignedPop_Full, AssignedPop_0.1x, AssignedPop_0.01x) %>%
+  # filter(AssignedPop_Full == "Newfoundland") %>%
+  count(Site)
+```
+
+
+Save off downsampling assignment
+
+```{r}
+amre.ds.summary2save <- amre.ds.summary %>% 
+  select(DS, Sample, Site, K5_breeding, AssignedPop, AssignedLike, AssignedProb)
+
+# write_csv(x = amre.ds.summary2save,
+#           file = "./out/all.breeding.downsampled.assignment.table.csv")
+
+amre.ds.wintering.summary2save <- amre.ds.summary.wintering %>% 
+  select(DS, Sample, Site, Lat, Lon, AssignedPop, AssignedLike, AssignedProb)
+# 
+# write_csv(x = amre.ds.wintering.summary2save,
+#           file = "./out/all.wintering.downsampled.assignment.table.csv")
+```

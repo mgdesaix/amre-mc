@@ -1,0 +1,188 @@
+---
+title: 'WGSassign: consistency of assignment'
+author: "Matt G. DeSaix"
+date: "2023-05-04"
+output: html_document
+---
+
+
+```{r}
+library(tidyverse)
+depth <- read_table("../bioinformatics/depth/depth-summary.txt")
+amre.meta <- read_csv("../data/samples/amre_master_tidy.csv",
+                      show_col_types = FALSE) %>%
+  left_join(depth, by = "Sample")
+ids.122 <- read_table("./data/effective-sample-size/amre.breeding.122.equal_effective.WGSassign_IDs.txt",
+                        col_names = c("Bam", "K5_breeding"),
+                        show_col_types = FALSE)
+ids.47.148 <- read_delim("./data/combined-47-148-122/amre.combined.47.WGSassignIDs.txt",
+                         col_names = c("Bam", "K5_breeding"), delim = "\t",
+                         show_col_types = F) %>%
+  rbind(read_delim("./data/combined-47-148-122/amre.combined.148.WGSassignIDs.txt",
+                         col_names = c("Bam", "K5_breeding"), delim = "\t",
+                   show_col_types = F))
+pops <- c("Newfoundland", "Northeast", "Northwest", "South", "SouthDakota")
+```
+
+
+
+```{r}
+breeding.400k.files <- list.files(path = "./data/consistency",
+                                  pattern = "*.pop_like_LOO.txt",
+                                  full.names = T)
+
+breeding.400k.list <- list()
+for(i in 1:length(breeding.400k.files)){
+  breeding.400k.list[[i]] <- ids.122 %>%
+    cbind(read_delim(breeding.400k.files[i], col_names = pops, show_col_types = F)) %>%
+  left_join(amre.meta, by = c("Bam", "K5_breeding")) %>%
+  pivot_longer(cols = Newfoundland:SouthDakota,
+               names_to = "AssignedPop",
+               values_to = "AssignedLike") %>%
+  group_by(Sample) %>%
+  mutate(AssignedProb = round(exp(AssignedLike - max(AssignedLike)) / sum(exp(AssignedLike - max(AssignedLike))),2 )) %>%
+  filter(AssignedLike == max(AssignedLike)) %>%
+  ungroup() %>%
+  select(Sample, Site, K5_breeding, AssignedPop, AssignedLike, AssignedProb) %>%
+    add_column("Group" = i)
+}
+
+
+breeding.400k.df <- bind_rows(breeding.400k.list)
+```
+
+
+```{r}
+breeding.400k.df %>%
+  group_by(Sample) %>%
+  summarize(Correct = sum(K5_breeding == AssignedPop)/n(),
+            MeanProb = mean(AssignedProb)) %>%
+  filter(Correct < 1)
+```
+
+
+
+```{r}
+breeding.400k.df %>%
+  group_by(Sample) %>%
+  summarize(Correct = sum(K5_breeding == AssignedPop)/n(),
+            MeanProb = mean(AssignedProb)) %>%
+  filter(Correct < 1) %>%
+  left_join(amre.meta)
+```
+
+
+```{r}
+breeding.400k.df %>%
+  filter(Sample == "SERU2004")
+```
+
+
+### Standard assignment
+
+```{r}
+nonbreeding.400k.files <- list.files(path = "./data/consistency",
+                                  pattern = "*.pop_like.txt",
+                                  full.names = T)
+
+nonbreeding.400k.list <- list()
+for(i in 1:length(nonbreeding.400k.files)){
+  nonbreeding.400k.list[[i]] <- ids.47.148 %>%
+    cbind(read_delim(nonbreeding.400k.files[i], col_names = pops, show_col_types = F)) %>%
+  left_join(amre.meta, by = c("Bam", "K5_breeding")) %>%
+  pivot_longer(cols = Newfoundland:SouthDakota,
+               names_to = "AssignedPop",
+               values_to = "AssignedLike") %>%
+  group_by(Sample) %>%
+  mutate(AssignedProb = round(exp(AssignedLike - max(AssignedLike)) / sum(exp(AssignedLike - max(AssignedLike))),2 )) %>%
+  filter(AssignedLike == max(AssignedLike)) %>%
+  ungroup() %>%
+  select(Sample, Site, K5_breeding, AssignedPop, AssignedLike, AssignedProb) %>%
+    add_column("Group" = i)
+}
+
+
+nonbreeding.400k.df <- bind_rows(nonbreeding.400k.list)
+```
+
+
+
+```{r}
+nonbreeding.400k.df %>%
+  group_by(Sample) %>%
+  summarize(Correct = sum(K5_breeding == AssignedPop)/n(),
+            MeanProb = mean(AssignedProb)) %>%
+  filter(Correct < 1) %>%
+  left_join(amre.meta)
+```
+
+
+```{r}
+nonbreeding.400k.df %>%
+  filter(Sample %in% c("18N01092", "283021325", "283021336")) %>%
+  arrange(Sample)
+```
+
+### Nonbreeding
+
+
+```{r}
+nonbreeding.400k.df %>%
+  filter(is.na(K5_breeding)) %>%
+  group_by(Sample) %>%
+  summarize(WB = sum(AssignedPop == "Northwest"),
+            BR = sum(AssignedPop == "SouthDakota"),
+            NT = sum(AssignedPop == "Northeast"),
+            ST = sum(AssignedPop == "South"),
+            MP = sum(AssignedPop == "Newfoundland"),
+            MeanProb = mean(AssignedProb))
+
+```
+
+```{r}
+nonbreeding.inconsistent <- nonbreeding.400k.df %>%
+  filter(is.na(K5_breeding)) %>%
+  group_by(Sample) %>%
+  summarize(MaxPop = names(which.max(table(AssignedPop))),
+            Counts = max(table(AssignedPop)),
+            MeanProb = mean(AssignedProb)) %>%
+  filter(Counts < 8)
+
+nonbreeding.inconsistent %>%
+  left_join(amre.meta)
+```
+
+```{r}
+nonbreeding.400k.df %>%
+  filter(is.na(K5_breeding)) %>%
+  group_by(Sample) %>%
+  summarize(MaxPop = names(which.max(table(AssignedPop))),
+            Counts = max(table(AssignedPop)),
+            MeanProb = mean(AssignedProb)) %>%
+  left_join(amre.meta) %>%
+  filter(Counts > 7) %>%
+  group_by(MaxPop) %>%
+  summarize(N = n())
+```
+
+
+```{r}
+nb.inc.samples <- unique(nonbreeding.inconsistent$Sample)
+
+nonbreeding.400k.df %>%
+  filter(Sample %in% nb.inc.samples) %>%
+  arrange(Sample) %>%
+  left_join(amre.meta) %>%
+  dplyr::select(Sample, Site, AssignedPop, AssignedProb, Depth)
+```
+
+
+
+
+
+
+
+
+
+
+

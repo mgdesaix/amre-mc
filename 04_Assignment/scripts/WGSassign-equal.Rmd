@@ -1,0 +1,278 @@
+---
+title: 'WGSassign: Comparing Downsampled Data'
+author: "Matt G. DeSaix"
+date: "2023-03-07"
+output: html_document
+---
+
+```{r}
+library(tidyverse)
+amre.meta <- read_csv("../data/samples/amre_master_tidy.csv",
+                      show_col_types = FALSE)
+depth <- read_table("../bioinformatics/depth/depth-summary.txt")
+pops <- c("Newfoundland", "Northeast", "Northwest", "South", "SouthDakota")
+```
+
+reading in data 
+
+```{r}
+amre.ids.169 <- read_table("./data/effective-sample-size/amre.breeding.bams.nobad.min0.1x.ind169.WGSassignIDs.txt",
+                        col_names = c("Bam", "K5_breeding"),
+                        show_col_types = FALSE)
+amre.ne.169 <- read_table("./data/effective-sample-size/amre.breeding.169.unequal.ne_ind_full.txt", 
+                          col_names = c("Effective_Sample"))
+amre.ids.135 <- read_table("./data/combined-34-135/amre.combined.34.135.ind135.WGSassignIDs.txt",
+                        col_names = c("Bam", "K5_breeding"),
+                        show_col_types = FALSE)
+amre.ne.135 <- read_table("./data/combined-34-135/amre.combined.34.135.ind135.ne_ind_full.txt", 
+                          col_names = c("Effective_Sample"))
+```
+
+### All breeding
+
+```{r}
+ne.169 <- cbind(amre.ids.169, amre.ne.169) %>%
+  left_join(amre.meta) %>%
+  left_join(depth) %>%
+  select(Bam, K5_breeding, Effective_Sample, Depth) %>%
+  mutate(Depth = ifelse(Depth > 2, 2, Depth)) %>%
+  group_by(K5_breeding) %>%
+  summarize(Effective_size = sum(Effective_Sample),
+            Mean_depth = mean(Depth),
+            Total_depth = sum(Depth))
+ne.169
+```
+
+
+### Equal sample size
+
+```{r}
+ne.135.df <- cbind(amre.ids.135, amre.ne.135) %>%
+  left_join(amre.meta) %>%
+  left_join(depth) %>%
+  select(Bam, K5_breeding, Effective_Sample, Depth) %>%
+  mutate(Depth = ifelse(Depth > 2, 2, Depth))
+ne.135 <- ne.135.df %>%
+  group_by(K5_breeding) %>%
+  summarize(Effective_size = sum(Effective_Sample),
+            Mean_depth = mean(Depth),
+            Total_depth = sum(Depth))
+ne.135
+```
+
+
+```{r}
+ind.remove <- c("SERU2001.bam", "SERU2003.bam", "SERU2021.bam", # Northwest
+                "225062929.bam", "215063396.bam", # South
+                "18N01092.bam", "225090254.bam", # Northeast
+                "20N002001.bam", "20N002002.bam", "20N002003.bam", "20N002004.bam", "20N002005.bam", "20N002006.bam" # SD
+                )
+ne.135.df
+```
+
+```{r}
+equal_bams_ids <- amre.ids.135 %>%
+  mutate(keep = ifelse(!Bam %in% ind.remove, 1, 0),
+         id = row_number()) %>%
+  mutate(gl1 = keep*(3 * id + 1),
+         gl2 = keep*(3 * id + 2),
+         gl3 = keep*(3 * id + 3)) %>%
+  filter(keep == 1)
+
+# equal_bams_ids %>%
+#   select(Bam, K5_breeding) %>%
+#   write_delim(file = "~/Downloads/amre.breeding.122.equal_effective.WGSassign_IDs.txt",
+#               col_names = F, delim = "\t")
+
+id_col <- equal_bams_ids %>%
+  pivot_longer(cols = gl1:gl3,
+               names_to = "gl", values_to = "column") %>%
+  pull(column)
+id_col
+```
+
+```{r}
+# write_lines(x = id_col, file = "~/Downloads/amre.breeding.equal_effective.cols.txt", sep = ",")
+```
+
+```{r}
+remaining_bams_ids <- amre.ids.169 %>%
+  left_join(amre.meta) %>%
+  mutate(keep = ifelse(Bam %in% ind.remove | !Bam %in% amre.ids.135$Bam, 1, 0),
+         id = row_number()) %>%
+  mutate(gl1 = keep*(3 * id + 1),
+         gl2 = keep*(3 * id + 2),
+         gl3 = keep*(3 * id + 3)) %>%
+  filter(keep == 1)
+
+# remaining_bams_ids %>%
+#   select(Bam, K5_breeding) %>%
+#   write_delim(file = "~/Downloads/amre.breeding.47.remaining.WGSassign_IDs.txt",
+#               col_names = F, delim = "\t")
+id_col_remaining <- remaining_bams_ids %>%
+  pivot_longer(cols = gl1:gl3,
+               names_to = "gl", values_to = "column") %>%
+  pull(column)
+# write_lines(x = id_col_remaining, file = "./data/amre.breeding.equal_effective.remaining.cols.txt", sep = ",")
+```
+
+
+
+### Equal effective sample size
+
+```{r}
+amre.ids.122 <- read_table("./data/effective-sample-size/amre.breeding.122.equal_effective.WGSassign_IDs.txt",
+                        col_names = c("Bam", "K5_breeding"),
+                        show_col_types = FALSE)
+amre.ne.122 <- read_table("./data/effective-sample-size/amre.breeding.122.equal_effective.ne_ind_full.txt", 
+                          col_names = c("Effective_Sample"))
+
+ne.122 <- cbind(amre.ids.122, amre.ne.122) %>%
+  left_join(amre.meta) %>%
+  left_join(depth) %>%
+  select(Bam, K5_breeding, Effective_Sample, Depth) %>%
+  mutate(Depth = ifelse(Depth > 2, 2, Depth)) %>%
+  group_by(K5_breeding) %>%
+  summarize(N = n(),
+            Effective_size = round(sum(Effective_Sample),1),
+            Mean_depth = round(mean(Depth),1),
+            Total_depth = round(sum(Depth),1))
+ne.122
+```
+
+
+
+### Compiling all equal vs unequal accuracy results
+
+```{r}
+loo.pop.122 <- cbind(read_delim(file = "./data/effective-sample-size/amre.breeding.122.equal_effective.pop_like_LOO.txt",
+                      col_names = pops,
+                      show_col_types = FALSE),
+                     amre.ids.122 %>% select(-K5_breeding)) %>%
+  add_column(Source = 122,
+             Assignment = "LOO")
+like.pop.remaining.47.122 <- cbind(read_table("./data/combined-47-148-122/amre.combined.47.148.ds_2.0x.pop_like.txt",
+                                              col_names = pops) %>% head(n = 47),
+                              read_table("./data/combined-47-148-122/amre.combined.47.WGSassignIDs.txt",
+                                              col_names = c("Bam", "K5_breeding"))) %>%
+  add_column(Source = 122,
+             Assignment = "Individual") %>%
+  select(-c(K5_breeding))
+loo.pop.135 <- cbind(read_delim(file = "./data/combined-34-135/amre.combined.34.135.ind135.pop_like_LOO.txt",
+                      col_names = pops,
+                      show_col_types = FALSE),
+                     amre.ids.135 %>% select(Bam)) %>%
+  add_column(Source = 135,
+             Assignment = "LOO")
+like.pop.remaining.34.135 <- cbind(read_table("./data/combined-34-135/amre.combined.34.135.ind34.remaining.pop_like.txt",
+                                              col_names = pops),
+                                   read_table("./data/combined-34-135/amre.combined.34.135.ind34.WGSassignIDs.txt",
+                                              col_names = c("Bam", "K5_breeding")) %>%
+                                     select(Bam)) %>%
+  add_column(Source = 135,
+             Assignment = "Individual")
+loo.pop.169 <- cbind(read_delim(file = "./data/effective-sample-size/amre.breeding.169.unequal.pop_like_LOO.txt",
+                      col_names = pops,
+                      show_col_types = FALSE),
+amre.ids.169 %>% select(-K5_breeding)) %>%
+  add_column(Source = 169,
+             Assignment = "LOO")
+
+full.breeding.accuracy <- rbind(loo.pop.122, like.pop.remaining.47.122,
+      loo.pop.135, like.pop.remaining.34.135,
+      loo.pop.169) %>%
+  left_join(amre.meta %>% left_join(depth) %>% select(Bam, K5_breeding, Site, Depth)) %>%
+pivot_longer(cols = Newfoundland:SouthDakota,
+               names_to = "AssignedPop",
+               values_to = "AssignedLike") %>%
+  group_by(Bam, Source, Assignment) %>%
+  mutate(Diff2 = AssignedLike - max(AssignedLike[AssignedLike != max(AssignedLike)])) %>%
+  # mutate(AssignedProb = round(exp(AssignedLike)/sum(exp(AssignedLike))),2) %>%
+  mutate(AssignedProb = round(exp(AssignedLike - max(AssignedLike)) / sum(exp(AssignedLike - max(AssignedLike))),2 )) %>%
+    filter(AssignedLike == max(AssignedLike)) %>%
+  ungroup() %>%
+  select(Bam, Site, K5_breeding, Source, Assignment, AssignedPop, AssignedLike, AssignedProb, Depth, Diff2) %>%
+  mutate(Correct = ifelse(K5_breeding == AssignedPop & AssignedProb > 0.8, 1, 0))
+```
+
+```{r}
+full.breeding.accuracy %>%
+  filter(Correct == 0)
+```
+
+```{r}
+full.breeding.accuracy %>%
+  group_by(Source, Assignment) %>%
+  summarize(Accuracy = round(sum(Correct)/n() * 100,1),
+            N = n(),
+            Incorrect = n() - sum(Correct),
+            Min_depth = round(min(Depth),1),
+            .groups = "drop")
+```
+
+```{r}
+full.breeding.accuracy %>%
+  group_by(Source, Assignment, K5_breeding, AssignedPop) %>%
+  summarize(Accuracy = round(sum(Correct)/n() * 100,1),
+            N = n(),
+            Incorrect = n() - sum(Correct),
+            .groups = "drop")
+```
+
+```{r}
+full.breeding.accuracy %>%
+  group_by(Source, K5_breeding, AssignedPop) %>%
+  summarize(Accuracy = round(sum(Correct)/n() * 100,1),
+            N = n(),
+            Incorrect = n() - sum(Correct),
+            .groups = "drop")
+```
+
+```{r}
+ne.df <- rbind(ne.122 %>% add_column(Source = 122),
+      ne.135 %>% add_column(Source = 135),
+      ne.169 %>% add_column(Source = 169))
+ne.df
+```
+
+
+
+```{r}
+full.breeding.accuracy %>%
+  left_join(ne.df %>% select(K5_breeding, Source, Effective_size), 
+            by = c("K5_breeding" = "K5_breeding", 
+                          "Source" = "Source")) %>%
+  rename(K5_size = Effective_size) %>%
+  left_join(ne.df %>% select(K5_breeding, Source, Effective_size), 
+            by = c("AssignedPop" = "K5_breeding", 
+                          "Source" = "Source")) %>%
+  rename(Assigned_size = Effective_size) %>%
+  # filter(Correct == 0) %>%
+  group_by(Source) %>%
+  mutate(Effective_swap = ifelse(Assigned_size > K5_size, 1, 0)) %>%
+  summarize(Accuracy = round(100*sum(Correct)/n(),1),
+    Correct = sum(Correct),
+    Incorrect = n() - sum(Correct),
+            Assigned2Larger = sum(Effective_swap),
+            .groups = "drop")
+```
+
+
+Save off likelihoods
+
+```{r}
+likes2save <- rbind(loo.pop.122, like.pop.remaining.47.122,
+      loo.pop.135, like.pop.remaining.34.135,
+      loo.pop.169) %>%
+  left_join(amre.meta %>% left_join(depth) %>% select(Bam, Sample, K5_breeding, Site)) %>%
+  mutate(Assigned = apply(.[,c("Newfoundland", "Northeast", "Northwest", 
+                               "South", "SouthDakota")],
+                          1, function(x) names(x)[which.max(x)])) %>%
+  select(Source, Assignment, Sample, Site, K5_breeding, Assigned,
+         Newfoundland, Northeast, Northwest, South, SouthDakota)
+
+# write_csv(x = likes2save,
+#           file = "./out/all.breeding.assignment.likelihoods.csv")
+
+likes2save
+```
