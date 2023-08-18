@@ -59,7 +59,7 @@ where `${snps}` is a file with a single column of the `scaffold_position` format
 
 I have found that working with different DNA sources such as feathers and blood can result in high variation of sequencing depth. This can then skew different population genetic analyses, especially population structure. Some related issues are addressed in [Lou et al. 2022](https://doi.org/10.1111/1755-0998.13559), in which they also recommend down sampling as a technique to deal with depth in variation.
 
-For example, for the American Redstart data, the mean depth across all individuals was 1.5x however when examining by population, it is apparent that population means range as much as 0.5x - 3x. Sequencing depth was calculated using the `depth` function from [Samtools](http://www.htslib.org/doc/samtools-depth.html).
+For example, for the American Redstart data, the mean depth across all individuals was 1.5x however when examining by population, it is apparent that population means range as much as 0.5x - 3x. Sequencing depth was calculated using the `CollectWgsMetrics` tool from [GATK](https://gatk.broadinstitute.org/hc/en-us/articles/360037269351-CollectWgsMetrics-Picard-). We used the MEAN_COVERAGE [output from this function](https://broadinstitute.github.io/picard/picard-metric-definitions.html#CollectWgsMetrics.WgsMetrics) which provides genomic coverage of an individual, excluding reads that do not pass quality filters. An example script is provide ([get_depth.sh](./scripts/get_depth.sh)).
 
 <img src="./img/amre-populationALL-coverageDepth-plain.png" alt="Depth-plot" width="600"/>
 
